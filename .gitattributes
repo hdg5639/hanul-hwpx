@@ -1,0 +1,5 @@
+* text=auto eol=lf
+vendor/** -text
+*.hwpx -text
+*.wasm -text
+*.woff2 -text

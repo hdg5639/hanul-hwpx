@@ -1,0 +1,81 @@
+const vscode = require('vscode');
+const fs = require('node:fs/promises');
+const path = require('node:path');
+const assert = require('node:assert/strict');
+const { createHash } = require('node:crypto');
+const { unzipSync } = require('fflate');
+const root = path.resolve(__dirname, '..');
+const hash = bytes => createHash('sha256').update(bytes).digest('hex');
+async function until(predicate, description, timeout = 60000) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) { const value = await predicate(); if (value) return value; await new Promise(r => setTimeout(r, 100)); }
+  throw Error('Timeout: ' + description);
+}
+exports.run = async () => {
+  const results = [];
+  const cancellation = new vscode.CancellationTokenSource();
+  try {
+    const extension = vscode.extensions.getExtension('hanul-local.hanul-hwpx');
+    assert(extension, 'Development extension must be registered');
+    const { provider } = await extension.activate();
+    const directory = path.join(root, '.test', 'documents');
+    await fs.mkdir(directory, { recursive: true });
+    const file = path.join(directory, '통합 테스트.hwpx');
+    const source = await fs.readFile(path.join(root, 'templates', 'report.hwpx'));
+    await fs.writeFile(file, source);
+    const uri = vscode.Uri.file(file);
+    await vscode.commands.executeCommand('vscode.openWith', uri, 'hanul.editor');
+    const document = await until(() => provider.documents.get(uri.toString()), 'custom document');
+    await until(() => document.ready && document.pending.size === 0, 'webview load');
+    const initialExport = await provider.request(document, 'export', { format: 'hwpx' });
+    assert(initialExport.bytes.length > 0);
+    results.push('Actual VS Code Custom Editor and WASM webview initialized');
+    await provider.saveCustomDocument(document, cancellation.token);
+    assert.equal(hash(await fs.readFile(file)), hash(source));
+    results.push('Unmodified save preserves original bytes');
+    await provider.request(document, 'testInput', { text: '실제 VS Code 저장 검증' });
+    await until(() => document.version > document.savedVersion, 'dirty event');
+    await vscode.commands.executeCommand('workbench.action.files.save');
+    await until(async () => hash(await fs.readFile(file)) !== hash(source), 'native Ctrl+S save lifecycle');
+    const bytes = await fs.readFile(file);
+    const section = new TextDecoder().decode(unzipSync(bytes)['Contents/section0.xml']);
+    assert(section.includes('실제 VS Code 저장 검증'));
+    assert.equal(hash(await fs.readFile(file + '.hanul-backup')), hash(source));
+    results.push('Native VS Code save persists Korean edits and creates original backup');
+    await provider.request(document, 'testInput', { text: '복구용 미저장 변경' });
+    await until(() => document.version > document.savedVersion, 'unsaved recovery change');
+    const backup = await provider.backupCustomDocument(document, { destination: vscode.Uri.file(path.join(directory, 'recovery.hwpx')) }, cancellation.token);
+    const backupBytes = await fs.readFile(vscode.Uri.parse(backup.id).fsPath);
+    assert(new TextDecoder().decode(unzipSync(backupBytes)['Contents/section0.xml']).includes('복구용 미저장 변경'));
+    assert.equal(hash(await fs.readFile(file)), hash(bytes));
+    const restoreUri = vscode.Uri.file(path.join(directory, 'restored-original.hwpx'));
+    await fs.writeFile(restoreUri.fsPath, bytes);
+    const restored = await provider.openCustomDocument(restoreUri, { backupId: backup.id });
+    assert(restored.restored);
+    assert.equal(hash(restored.bytes), hash(backupBytes));
+    assert.equal(restored.originalHash, hash(bytes));
+    restored.dispose();
+    await backup.delete();
+    results.push('Hot-exit backup captures unsaved edits and restores with the original conflict hash');
+    await fs.writeFile(file, source);
+    await assert.rejects(provider.saveCustomDocument(document, cancellation.token), /외부/);
+    assert.equal(hash(await fs.readFile(file)), hash(source));
+    results.push('External file conflict is detected without overwriting');
+    await provider.revertCustomDocument(document);
+    assert.equal(document.version, document.savedVersion);
+    results.push('Revert reloads original and resets state');
+    await vscode.commands.executeCommand('hanul.new');
+    const fresh = await until(() => [...provider.documents.values()].find(d => d.uri.scheme === 'untitled'), 'new document');
+    await until(() => fresh.ready && fresh.pending.size === 0, 'new document load');
+    await provider.request(fresh, 'testInput', { text: '새 문서 저장 검증' });
+    const destination = vscode.Uri.file(path.join(directory, '새 문서.hwpx'));
+    await provider.saveCustomDocumentAs(fresh, destination, cancellation.token);
+    assert(new TextDecoder().decode(unzipSync(await fs.readFile(destination.fsPath))['Contents/section0.xml']).includes('새 문서 저장 검증'));
+    results.push('New untitled HWPX document can be edited and saved as a file');
+    await fs.writeFile(path.join(root, 'artifacts', 'vscode-test-results.json'), JSON.stringify({ passed: true, results }, null, 2));
+    console.log(results.join('\n'));
+  } catch (error) {
+    await fs.writeFile(path.join(root, 'artifacts', 'vscode-test-results.json'), JSON.stringify({ passed: false, results, error: String(error), stack: error.stack }, null, 2));
+    throw error;
+  } finally { cancellation.dispose(); }
+};

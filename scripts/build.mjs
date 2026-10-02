@@ -1,0 +1,10 @@
+import { build } from 'esbuild';
+import { mkdir, access } from 'node:fs/promises';
+import { patchStudio } from './patch-studio.mjs';
+await access('vendor/studio/index.html');
+await patchStudio();
+await mkdir('artifacts', { recursive: true });
+await build({ entryPoints: ['src/extension.ts'], bundle: true, platform: 'node', format: 'cjs', external: ['vscode'], outfile: 'dist/extension.js', sourcemap: true });
+await build({ entryPoints: ['src/storage.ts'], bundle: true, platform: 'node', format: 'esm', outfile: 'dist/storage.mjs' });
+await build({ entryPoints: ['src/html.ts'], bundle: true, platform: 'node', format: 'esm', outfile: 'dist/html.mjs' });
+console.log('한울 확장 빌드 완료');

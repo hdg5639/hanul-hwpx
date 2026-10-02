@@ -1,0 +1,17 @@
+:root { color-scheme: light; }
+body { margin: 0; height: 100vh; display: flex; flex-direction: column; overflow: hidden; font-family: Pretendard, 'Noto Sans KR', sans-serif; }
+#hanul-bar { display: flex; align-items: center; gap: 12px; min-height: 54px; padding: 0 18px; background: #fff; color: #172b45; border-bottom: 1px solid #dce5ee; font-size: 12px; flex-shrink: 0; }
+.hanul-logo { display: grid; place-items: center; width: 27px; height: 27px; border-radius: 8px; color: #fff; background: #2563eb; font-weight: 800; font-size: 17px; }
+#hanul-bar strong { font-size: 16px; letter-spacing: -.7px; }
+#hanul-name { max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #52657b; }
+.hanul-tag { border-radius: 5px; background: #eef3fa; padding: 3px 7px; color: #607087; white-space: nowrap; }
+#hanul-state { margin-left: auto; color: #52657b; white-space: nowrap; }
+#hanul-bar button { border: 1px solid #dce5ee; background: #fff; color: #24364b; border-radius: 6px; padding: 7px 10px; cursor: pointer; font: inherit; white-space: nowrap; }
+#hanul-bar button:hover { background: #edf4ff; }
+#hanul-bar button.primary { background: #2563eb; color: #fff; border-color: #2563eb; }
+#hanul-bar button:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+#hanul-notice { background: #fff5db; color: #78581e; font-size: 12px; padding: 8px 18px; flex-shrink: 0; }
+#hanul-notice:empty { display: none; }
+#studio-root { flex: 1; min-height: 0; width: 100%; }
+[hidden] { display: none !important; }
+@media (max-width: 880px) { .hanul-tag, #hanul-name { display: none; } #hanul-bar { gap: 6px; padding: 0 10px; } #hanul-bar button { padding: 7px; } }
